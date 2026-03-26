@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bingo 1 vs 1 Online</title>
+    <!-- PeerJS for Direct Device-to-Device Connection -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #FFF8E1;
+            --ink-color: #2c3e50;
+            --btn-color: #FFB74D;
+            --btn-shadow: #E65100;
+            --p1-color: #FF6B6B;
+            --p2-color: #4ECDC4;
+            --marked-color: #FFE66D;
+            --win-color: #00b894;
+            --online-color: #6C5CE7;
+        }
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(#d7ccc8 1px, transparent 1px);
+            background-size: 20px 20px;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+            color: var(--ink-color);
+            user-select: none;
+        }
+
+        .screen {
+            display: none;
+            width: 100%;
+            max-width: 500px;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .screen.active { display: flex; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background: white;
+            border: 4px solid var(--ink-color);
+            border-radius: 20px;
+            box-shadow: 8px 8px 0px var(--ink-color);
+            padding: 20px;
+            text-align: center;
+            width: 100%;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        h1 { font-size: 3rem; margin: 0; text-transform: uppercase; color: var(--ink-color); text-shadow: 2px 2px 0px rgba(0,0,0,0.1); line-height: 1; }
+        h2 { margin: 10px 0; }
+
+        .cartoon-btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 3px solid var(--ink-color);
+            border-radius: 15px;
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: white;
+            box-shadow: 5px 5px 0px var(--ink-color);
+            transition: transform 0.1s;
+            text-decoration: none;
+        }
+        .cartoon-btn:active { transform: translate(2px, 2px); box-shadow: 3px 3px 0px var(--ink-color); }
+        .cartoon-btn:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; transform: none; }
+        
+        .btn-online { background: var(--online-color); box-shadow: 5px 5px 0px #4834d4; }
+        .btn-back { background: #95a5a6; box-shadow: 5px 5px 0px #7f8c8d; }
+        .btn-share { background: #25D366; box-shadow: 5px 5px 0px #128C7E; }
+        .btn-copy { background: #636e72; box-shadow: 5px 5px 0px #2d3436; }
+
+        /* Lobby Styles */
+        .room-id-box {
+            background: #eee;
+            padding: 15px;
+            border: 2px dashed var(--ink-color);
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 1.4rem;
+            margin: 15px 0;
+            word-break: break-all;
+            font-weight: bold;
+            color: var(--ink-color);
+        }
+        .input-group { display: flex; gap: 5px; margin: 15px 0; }
+        input { flex: 1; padding: 12px; border: 3px solid var(--ink-color); border-radius: 10px; font-family: 'Fredoka', sans-serif; font-size: 1.1rem; text-align: center; outline: none; }
+        input:focus { border-color: var(--online-color); }
+
+        /* Game Layout */
+        .game-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            gap: 20px;
+        }
+
+        .board-container {
+            width: 100%;
+            max-width: 350px;
+            margin: 0 auto;
+        }
+
+        /* Bingo Board - Perfect Alignment */
+        .bingo-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            background: var(--ink-color);
+            border: 4px solid var(--ink-color);
+            border-radius: 12px;
+            padding: 6px;
+            aspect-ratio: 1;
+            box-shadow: 5px 5px 0px rgba(0,0,0,0.1);
+            width: 100%;
+        }
+
+        .cell {
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            font-weight: 800;
+            border-radius: 6px;
+            cursor: pointer;
+            aspect-ratio: 1;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            user-select: none;
+            color: var(--ink-color);
+        }
+
+        .cell.clickable:hover {
+            background: #f0f0f0;
+            transform: scale(1.05);
+            z-index: 2;
+            border: 2px solid var(--online-color);
+        }
+        .cell.clickable:active {
+            transform: scale(0.95);
+        }
+
+        .cell.marked {
+            background: var(--marked-color);
+            position: relative;
+            animation: popMark 0.3s ease;
+        }
+        
+        .cell.marked::after {
+            content: '✕';
+            position: absolute;
+            font-size: 2.2rem;
+            color: rgba(44, 62, 80, 0.3);
+            font-weight: 900;
+            line-height: 0;
+        }
+
+        .cell.winning-cell {
+            background: var(--win-color) !important;
+            color: white;
+            animation: popWin 0.5s ease;
+            border: 2px solid white;
+        }
+
+        @keyframes popMark {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        @keyframes popWin {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3) rotate(5deg); }
+            100% { transform: scale(1); }
+        }
+
+        /* Controls */
+        .timer-box {
+            font-size: 2.5rem;
+            font-weight: 900;
+            background: var(--ink-color);
+            color: white;
+            padding: 10px 30px;
+            border-radius: 50px;
+            margin-bottom: 10px;
+            border: 4px solid white;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+            display: inline-block;
+        }
+        .timer-warning { background: #e74c3c; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        .turn-indicator-box {
+            background: #fff;
+            border: 3px solid var(--ink-color);
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            font-weight: 700;
+            font-size: 1.3rem;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.1);
+            width: 100%;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(44, 62, 80, 0.9);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: white;
+            border: 4px solid var(--ink-color);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 15px 15px 0px var(--ink-color);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 90%;
+            width: 350px;
+        }
+        @keyframes popIn { from { transform: scale(0.5) rotate(-10deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+
+        .warning-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #e74c3c;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 50px;
+            border: 3px solid var(--ink-color);
+            font-weight: bold;
+            z-index: 200;
+            display: none;
+            box-shadow: 5px 5px 0px var(--ink-color);
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown { from { top: -50px; } to { top: 20px; } }
+        
+        .connection-status {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- WARNING TOAST -->
+    <div id="warning-toast" class="warning-toast">⚠️ Number Already Chosen!</div>
+
+    <!-- HOME SCREEN -->
+    <div id="home-screen" class="screen active">
+        <div class="card">
+            <h1>BINGO</h1>
+            <p style="font-size: 1.2rem; margin: 15px 0 25px 0; color: #666;">1 vs 1 Online Multiplayer</p>
+            
+            <button class="cartoon-btn btn-online" onclick="showLobby()">🌍 Play Online</button>
+        </div>
+    </div>
+
+    <!-- LOBBY SCREEN -->
+    <div id="lobby-screen" class="screen">
+        <div class="card">
+            <h2>Online Lobby</h2>
+            
+            <button class="cartoon-btn btn-online" id="btn-create" onclick="createRoom()">🏠 Create Room</button>
+            
+            <div id="create-result" style="display:none; margin-top: 20px; animation: fadeIn 0.5s;">
+                <p style="margin:0; font-weight:bold;">Share this ID with your friend:</p>
+                <div class="room-id-box" id="my-room-id">...</div>
+                <div style="display:flex; gap:10px;">
+                    <button class="cartoon-btn btn-share" style="flex:1" onclick="shareRoomId()">📤 Share</button>
+                    <button class="cartoon-btn btn-copy" style="flex:1" onclick="copyRoomId()">📋 Copy</button>
+                </div>
+                <p class="connection-status" id="host-status">Waiting for player...</p>
+            </div>
+
+            <div style="margin: 25px 0; border-bottom: 2px dashed #ccc; width: 100%;"></div>
+
+            <h3>Join Room</h3>
+            <div class="input-group">
+                <input type="text" id="join-id-input" placeholder="Paste Room ID here">
+                <button class="cartoon-btn btn-online" style="width:auto; margin:0;" onclick="joinRoom()">Join</button>
+            </div>
+            <p class="connection-status" id="join-status"></p>
+
+            <button class="cartoon-btn btn-back" onclick="goHome()">Back to Home</button>
+        </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen">
+        <div class="game-layout">
+            
+            <!-- Controls (Top) -->
+            <div class="card" style="padding: 15px; margin-bottom: 10px;">
+                <div class="timer-box" id="timer">60</div>
+                <div class="turn-indicator-box" id="turn-indicator">Waiting...</div>
+                <p id="online-status" style="font-size:0.8rem; color:#666; margin:0;"></p>
+            </div>
+
+            <!-- Single Board -->
+            <div class="board-container">
+                <div class="card">
+                    <h2 id="my-board-title" style="margin-bottom: 15px;">My Board</h2>
+                    <div class="bingo-grid" id="my-grid"></div>
+                </div>
+            </div>
+
+            <button class="cartoon-btn btn-back" style="max-width: 200px;" onclick="goHome()">Exit Game</button>
+        </div>
+    </div>
+
+    <!-- WIN MODAL -->
+    <div class="modal" id="win-modal">
+        <div class="modal-content">
+            <h1 style="color: var(--win-color); font-size: 4rem; margin: 0; line-height: 1;">BINGO!</h1>
+            <h2 id="winner-name" style="margin-top: 10px;">Player 1 Wins!</h2>
+            <button class="cartoon-btn" onclick="goHome()">Play Again</button>
+        </div>
+    </div>
+
+<script>
+    // --- CONFIG ---
+    const GRID_SIZE = 5;
+    const TOTAL_NUMBERS = 25;
+    const WIN_COUNT = 5;
+    const TIME_LIMIT = 60;
+
+    // --- STATE ---
+    let myBoard = [];       // The board I see
+    let myMarks = [];       // Marks on MY board
+    let chosenNumbers = []; // Numbers called by anyone
+    let currentPlayer = 1;  // 1 or 2
+    let timerInterval;
+    let timeLeft = TIME_LIMIT;
+    let isGameActive = false;
+    let myPlayerId = 1;     // In online mode: 1 = Host, 2 = Client
+
+    // PeerJS Variables
+    let peer = null;
+    let conn = null;
+    let myRoomId = null;
+
+    // --- DOM ---
+    const homeScreen = document.getElementById('home-screen');
+    const lobbyScreen = document.getElementById('lobby-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const myGrid = document.getElementById('my-grid');
+    const timerEl = document.getElementById('timer');
+    const turnIndicator = document.getElementById('turn-indicator');
+    const winModal = document.getElementById('win-modal');
+    const winnerNameEl = document.getElementById('winner-name');
+    const warningToast = document.getElementById('warning-toast');
+    const myBoardTitle = document.getElementById('my-board-title');
+    const onlineStatusEl = document.getElementById('online-status');
+
+    // --- INITIALIZATION ---
+    function startGame() {
+        homeScreen.classList.remove('active');
+        lobbyScreen.classList.remove('active');
+        gameScreen.classList.add('active');
+        
+        onlineStatusEl.innerText = "🟢 Connected to Opponent";
+        onlineStatusEl.style.color = "green";
+
+        initBoards();
+        resetGame();
+    }
+
+    function goHome() {
+        clearInterval(timerInterval);
+        if (conn) conn.close();
+        if (peer) peer.destroy();
+        conn = null;
+        peer = null;
+        
+        winModal.style.display = 'none';
+        gameScreen.classList.remove('active');
+        lobbyScreen.classList.remove('active');
+        homeScreen.classList.add('active');
+        isGameActive = false;
+    }
+
+    function initBoards() {
+        // Generate MY unique random board
+        myBoard = generateRandomBoard();
+        myMarks = Array(25).fill(false);
+        chosenNumbers = [];
+        
+        // Set Title based on who I am
+        if (myPlayerId === 1) {
+            myBoardTitle.innerText = "Player 1's Board";
+            myBoardTitle.style.color = "var(--p1-color)";
+        } else {
+            myBoardTitle.innerText = "Player 2's Board";
+            myBoardTitle.style.color = "var(--p2-color)";
+        }
+
+        // Render ONLY my board
+        renderBoard(myGrid, myBoard, myMarks);
+    }
+
+    function generateRandomBoard() {
+        let nums = Array.from({length: TOTAL_NUMBERS}, (_, i) => i + 1);
+        for (let i = nums.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [nums[i], nums[j]] = [nums[j], nums[i]];
+        }
+        return nums;
+    }
+
+    function renderBoard(gridEl, boardData, marksData) {
+        gridEl.innerHTML = '';
+        boardData.forEach((num, index) => {
+            const cell = document.createElement('div');
+            cell.classList.add('cell');
+            cell.innerText = num;
+            cell.id = `cell-${index}`;
+            cell.dataset.number = num;
+            
+            // Click Event
+            cell.onclick = () => handleCellClick(num);
+            
+            if (marksData[index]) {
+                cell.classList.add('marked');
+            }
+            gridEl.appendChild(cell);
+        });
+        updateBoardInteractivity();
+    }
+
+    function resetGame() {
+        chosenNumbers = [];
+        currentPlayer = 1;
+        timeLeft = TIME_LIMIT;
+        isGameActive = true;
+        
+        // Reset Marks
+        myMarks.fill(false);
+        
+        // Re-render to clear marks
+        renderBoard(myGrid, myBoard, myMarks);
+        
+        updateTurnUI();
+        startTimer();
+    }
+
+    // --- ONLINE LOGIC (PeerJS) ---
+    function showLobby() {
+        homeScreen.classList.remove('active');
+        lobbyScreen.classList.add('active');
+        document.getElementById('create-result').style.display = 'none';
+        document.getElementById('join-status').innerText = '';
+        document.getElementById('host-status').innerText = 'Waiting for player...';
+        document.getElementById('join-id-input').value = '';
+    }
+
+    function createRoom() {
+        const btn = document.getElementById('btn-create');
+        btn.disabled = true;
+        btn.innerText = "Creating...";
+
+        peer = new Peer(null, { debug: 2 });
+
+        peer.on('open', (id) => {
+            myRoomId = id;
+            myPlayerId = 1; // Host is Player 1
+            document.getElementById('create-result').style.display = 'block';
+            document.getElementById('my-room-id').innerText = id;
+            btn.disabled = false;
+            btn.innerText = "Create Room";
+        });
+
+        peer.on('connection', (c) => {
+            conn = c;
+            setupConnection();
+            document.getElementById('host-status').innerText = "Player Connected! Starting...";
+            document.getElementById('host-status').style.color = "green";
+            setTimeout(() => {
+                startGame();
+            }, 1000);
+        });
+    }
+
+    function joinRoom() {
+        const id = document.getElementById('join-id-input').value.trim();
+        const status = document.getElementById('join-status');
+        
+        if (!id) { status.innerText = "Please enter a Room ID"; return; }
+        status.innerText = "Connecting...";
+
+        peer = new Peer(null, { debug: 2 });
+
+        peer.on('open', () => {
+            conn = peer.connect(id);
+            conn.on('open', () => {
+                myPlayerId = 2; // Client is Player 2
+                setupConnection();
+                status.innerText = "Connected! Starting...";
+                status.style.color = "green";
+                setTimeout(() => {
+                    startGame();
+                }, 1000);
+            });
+            conn.on('error', () => {
+                status.innerText = "Connection Failed. Check ID.";
+                status.style.color = "red";
+            });
+        });
+        
+        peer.on('error', (err) => {
+            status.innerText = "Network Error.";
+            status.style.color = "red";
+        });
+    }
+
+    function setupConnection() {
+        conn.on('data', (data) => {
+            handleNetworkData(data);
+        });
+        conn.on('close', () => {
+            if(isGameActive) alert("Opponent disconnected!");
+            goHome();
+        });
+    }
+
+    function copyRoomId() {
+        if (!myRoomId) return;
+        navigator.clipboard.writeText(myRoomId).then(() => showToast("Room ID Copied!"));
+    }
+
+    // --- SHARE FUNCTIONALITY ---
+    function shareRoomId() {
+        if (!myRoomId) return;
+        
+        const text = `Join my Bingo game! 🎲\nRoom ID: ${myRoomId}\n\nOpen the game and paste this ID to join!`;
+        
+        // Check if the device supports native sharing (Mobile phones mostly)
+        if (navigator.share) {
+            navigator.share({
+                title: 'Bingo 1 vs 1',
+                text: text,
+                url: window.location.href
+            })
+            .then(() => console.log('Successful share'))
+            .catch((error) => console.log('Error sharing', error));
+        } else {
+            // Fallback for Desktop browsers that don't support share API
+            copyRoomId();
+            alert("Share not supported on this browser. Room ID copied to clipboard!");
+        }
+    }
+
+    function handleNetworkData(data) {
+        if (data.type === 'move') {
+            // Opponent made a move
+            processMove(data.number, false); 
+        } else if (data.type === 'win') {
+            // Opponent won
+            endGame(myPlayerId === 1 ? 2 : 1, false); 
+        } else if (data.type === 'restart') {
+            resetGame();
+        }
+    }
+
+    function sendMove(number) {
+        if (conn && conn.open) {
+            conn.send({ type: 'move', number: number });
+        }
+    }
+
+    function sendWin() {
+        if (conn && conn.open) {
+            conn.send({ type: 'win' });
+        }
+    }
+
+    // --- GAME LOGIC ---
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerEl.classList.remove('timer-warning');
+        timerEl.innerText = timeLeft;
+        
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            timerEl.innerText = timeLeft;
+            if (timeLeft <= 10) timerEl.classList.add('timer-warning');
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                showToast("Time's Up! Auto-selecting...");
+                autoMove();
+            }
+        }, 1000);
+    }
+
+    function autoMove() {
+        // Find available numbers on MY board
+        let availableNumbers = [];
+        myBoard.forEach(num => {
+            if (!chosenNumbers.includes(num)) {
+                availableNumbers.push(num);
+            }
+        });
+
+        if (availableNumbers.length > 0) {
+            const randomNum = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
+            processMove(randomNum, true);
+        } else {
+            switchTurn();
+        }
+    }
+
+    function handleCellClick(num) {
+        if (!isGameActive) return;
+        
+        // Online Mode Logic Only
+        if (currentPlayer !== myPlayerId) return; // Not my turn
+
+        if (chosenNumbers.includes(num)) {
+            showToast("⚠️ Number Already Chosen!");
+            return;
+        }
+
+        processMove(num, true);
+    }
+
+    function processMove(num, isMyMove) {
+        // Add to global chosen list
+        chosenNumbers.push(num);
+
+        // Check if THIS number is on MY board
+        const index = myBoard.indexOf(num);
+        if (index !== -1) {
+            // It is on my board, mark it
+            myMarks[index] = true;
+            updateMyBoardVisuals(index);
+            
+            // Check if I won
+            if (checkWin(myMarks)) {
+                endGame(myPlayerId, isMyMove);
+                if (isMyMove) sendWin(); // Tell opponent I won
+                return;
+            }
+        }
+
+        // If I made the move, tell opponent
+        if (isMyMove) {
+            sendMove(num);
+        }
+
+        // Switch Turn
+        switchTurn();
+    }
+
+    function updateMyBoardVisuals(index) {
+        const cell = document.getElementById(`cell-${index}`);
+        if(cell) {
+            cell.classList.add('marked');
+        }
+    }
+
+    function checkWin(marks) {
+        // Rows
+        for (let r = 0; r < GRID_SIZE; r++) {
+            let count = 0;
+            for (let c = 0; c < GRID_SIZE; c++) {
+                if (marks[r * GRID_SIZE + c]) count++;
+            }
+            if (count === WIN_COUNT) return true;
+        }
+        // Cols
+        for (let c = 0; c < GRID_SIZE; c++) {
+            let count = 0;
+            for (let r = 0; r < GRID_SIZE; r++) {
+                if (marks[r * GRID_SIZE + c]) count++;
+            }
+            if (count === WIN_COUNT) return true;
+        }
+        // Diagonals
+        let d1 = 0, d2 = 0;
+        for (let i = 0; i < GRID_SIZE; i++) {
+            if (marks[i * GRID_SIZE + i]) d1++;
+            if (marks[i * GRID_SIZE + (GRID_SIZE - 1 - i)]) d2++;
+        }
+        if (d1 === WIN_COUNT || d2 === WIN_COUNT) return true;
+
+        return false;
+    }
+
+    function switchTurn() {
+        currentPlayer = currentPlayer === 1 ? 2 : 1;
+        updateTurnUI();
+    }
+
+    function updateTurnUI() {
+        timeLeft = TIME_LIMIT;
+        timerEl.innerText = timeLeft;
+        timerEl.classList.remove('timer-warning');
+        
+        let isMyTurn = (currentPlayer === myPlayerId);
+        let message = "";
+
+        if (isMyTurn) {
+            message = "Your Turn! Click a number.";
+            turnIndicator.style.color = "var(--win-color)";
+            turnIndicator.style.background = "#e8f8f5";
+        } else {
+            message = "Opponent's Turn...";
+            turnIndicator.style.color = "#666";
+            turnIndicator.style.background = "#f0f0f0";
+        }
+
+        turnIndicator.innerText = message;
+        updateBoardInteractivity();
+        startTimer();
+    }
+
+    function updateBoardInteractivity() {
+        const cells = document.querySelectorAll('#my-grid .cell');
+        const isActive = (currentPlayer === myPlayerId);
+
+        cells.forEach(cell => {
+            if (!cell.classList.contains('marked')) {
+                if (isActive) cell.classList.add('clickable');
+                else cell.classList.remove('clickable');
+            }
+        });
+    }
+
+    function endGame(winner, isMyWin) {
+        isGameActive = false;
+        clearInterval(timerInterval);
+        
+        let name = winner === myPlayerId ? "You" : "Opponent";
+
+        winnerNameEl.innerText = `${name} Wins!`;
+        winnerNameEl.style.color = winner === 1 ? "var(--p1-color)" : "var(--p2-color)";
+        
+        winModal.style.display = 'flex';
+    }
+
+    function showToast(msg) {
+        warningToast.innerText = msg;
+        warningToast.style.display = 'block';
+        setTimeout(() => { warningToast.style.display = 'none'; }, 2000);
+    }
+
+</script>
+</body>
+</html>
